@@ -1,17 +1,17 @@
 import re
 
-def find_and_remove_items(file_path, descriptions=None, names=None):
+def find_and_remove_items(file_path, descriptions=None, names=None, remove_reports=False):
     """
-    A simplified approach to find and remove items from audit files.
-    Uses string indexes to precisely locate and remove items.
+    Find and remove items and reports from audit files.
 
     Args:
         file_path (str): Path to the audit file
         descriptions (list): List of descriptions to match
         names (list): List of names to match
+        remove_reports (bool): Whether to remove report sections
 
     Returns:
-        int: Number of items removed
+        tuple: (items_removed, reports_removed)
     """
     with open(file_path, 'r', encoding='utf-8') as file:
         content = file.read()
@@ -20,6 +20,11 @@ def find_and_remove_items(file_path, descriptions=None, names=None):
         backup.write(content)
 
     items_to_remove = []
+    reports_removed = 0
+
+    # Remove report sections if requested
+    if remove_reports:
+        content, reports_removed = remove_report_sections(content)
 
     item_starts = [(match.start(), match.group())
                    for match in re.finditer(r'(?:\s*)<(?:custom_)?item>\s*\n', content)]
@@ -56,51 +61,68 @@ def find_and_remove_items(file_path, descriptions=None, names=None):
 
             items_to_remove.append((real_start, end_pos))
 
-    new_content = content
     for start, end in sorted(items_to_remove, reverse=True):
-        new_content = new_content[:start] + new_content[end:]
+        content = content[:start] + content[end:]
 
-    new_content = re.sub(r'\n{3,}', '\n\n', new_content)
+    content = re.sub(r'\n{3,}', '\n\n', content)
 
     with open(file_path, 'w', encoding='utf-8') as file:
-        file.write(new_content)
+        file.write(content)
 
-    return len(items_to_remove)
+    return len(items_to_remove), reports_removed
+
+def remove_report_sections(content):
+    """
+    Remove all report sections from the content.
+    """
+    report_pattern = r'<report\s+type\s*:\"[^\"]*\">.*?</report>'
+    reports = list(re.finditer(report_pattern, content, re.DOTALL))
+
+    for match in reversed(reports):
+        start = match.start()
+        while start > 0 and content[start-1].isspace():
+            start -= 1
+        content = content[:start] + content[match.end():]
+
+    return content, len(reports)
 
 def print_all_items(file_path):
-    """
-    Print all items in the file for verification purposes.
-
-    Args:
-        file_path (str): Path to the audit file
-    """
+    """Print all items in the file for verification purposes."""
     with open(file_path, 'r', encoding='utf-8') as file:
         content = file.read()
 
-    item_pattern = r'(?:\s*)<(?:custom_)?item>.*?</(?:custom_)?item>'
+    item_pattern = r'<(?:custom_)?item>.*?</(?:custom_)?item>'
+    report_pattern = r'<report\s+type\s*:\"[^\"]*\">.*?</report>'
+
     items = re.finditer(item_pattern, content, re.DOTALL)
+    reports = re.finditer(report_pattern, content, re.DOTALL)
 
     print("\nCurrent items in file:")
     for i, item in enumerate(items, 1):
-        item_content = item.group()
-        desc_match = re.search(r'description\s*:\s*"([^"]*)"', item_content)
-        name_match = re.search(r'name\s*:\s*"([^"]*)"', item_content)
+        desc_match = re.search(r'description\s*:\s*"([^"]*)"', item.group())
+        if desc_match:
+            print(f"{i}. {desc_match.group(1)}")
 
-        print(f"\nItem {i}:")
+    print("\nCurrent reports in file:")
+    for i, report in enumerate(reports, 1):
+        report_content = report.group()
+        type_match = re.search(r'type\s*:\"([^\"]*)\"', report_content)
+        desc_match = re.search(r'description\s*:\s*"([^"]*)"', report_content)
+        print(f"\nReport {i}:")
+        if type_match:
+            print(f"Type: {type_match.group(1)}")
         if desc_match:
             print(f"Description: {desc_match.group(1)}")
-        if name_match:
-            print(f"Name: {name_match.group(1)}")
         print("-" * 50)
 
 if __name__ == "__main__":
-    audit_file = "teste_audit_rhel8.audit"
+    audit_file = "aix_7.3.audit"
 
     print("Items before removal:")
     print_all_items(audit_file)
 
     descriptions_to_remove = [
-        "6.2.6 Ensure no duplicate user names exist",
+        "2.3 Allowlist Authorized Software and Report Validations"
     ]
 
     names_to_remove = [
@@ -108,13 +130,14 @@ if __name__ == "__main__":
     ]
 
     try:
-        removed_count = find_and_remove_items(
+        items_removed, reports_removed = find_and_remove_items(
             audit_file,
             descriptions=descriptions_to_remove,
-            names=names_to_remove
+            names=names_to_remove,
+            remove_reports=True
         )
 
-        print(f"\nSuccessfully removed {removed_count} items")
+        print(f"\nSuccessfully removed {items_removed} items and {reports_removed} reports")
         print(f"Backup created at: {audit_file}.backup")
 
     except Exception as e:
