@@ -19,16 +19,6 @@ It's pretty simple:
 find_and_remove_items("your_file.audit",
     descriptions=["Your description here"])
 
-# Or remove by name
-find_and_remove_items("your_file.audit",
-    names=["item_name_to_remove"])
-
-# Or both!
-find_and_remove_items("your_file.audit",
-    descriptions=["Description to remove"],
-    names=["name_to_remove"])
-```
-
 ## 🌟 Cool Features
 
 - 💾 Always creates a backup (filename.audit.backup)
@@ -65,7 +55,8 @@ If something's not working:
 
 ## 💡 Pro Tip
 
-Use `print_all_items("your_file.audit")` to see all items in your file before removing anything!
+1. Use `print_all_items("your_file.audit")` to see all items in your file before removing anything!
+2. Create a file with all the checks that you want to remove and give to the function as argument
 
 ## 🏆 TODO:
 1. List ALL the checks and return numbers to the user select what he want to delete.
